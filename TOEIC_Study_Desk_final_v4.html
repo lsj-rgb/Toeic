@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOEIC Study Desk</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{font-family:Pretendard,system-ui,sans-serif} body{background:#f8fafc}
+.tab.active{background:#1d4ed8;color:#fff}.tab{color:#475569}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:18px}
+.choice{border:1px solid #cbd5e1;border-radius:12px;padding:12px;text-align:left;width:100%;transition:.15s}
+.choice:hover{background:#f8fafc;border-color:#94a3b8}
+.choice.correct{background:#dcfce7;border-color:#16a34a;color:#166534}
+.choice.wrong{background:#fee2e2;border-color:#dc2626;color:#991b1b}
+.flip-card{perspective:1000px;min-height:150px;cursor:pointer}
+.flip-inner{position:relative;width:100%;height:150px;transition:transform .55s;transform-style:preserve-3d}
+.flip-card.flipped .flip-inner{transform:rotateY(180deg)}
+.flip-front,.flip-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:16px}
+.flip-front{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}
+.flip-back{background:#1e40af;color:white;transform:rotateY(180deg)}
+.hidden{display:none!important}
+#selectionTip{position:fixed;z-index:1000;display:none;background:#0f172a;color:white;padding:8px 12px;border-radius:9px;font-size:13px;box-shadow:0 8px 24px #0003;max-width:260px}
+.progress{height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden}.progress>div{height:100%;background:#2563eb;transition:width .2s}
+</style>
+</head>
+<body class="text-slate-800">
+<header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+ <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+  <div><div class="text-xl sm:text-2xl font-extrabold text-blue-800"><i class="fa-solid fa-graduation-cap mr-2"></i>TOEIC Study Desk</div><p class="text-xs text-slate-500 mt-1">문제 풀이 · LC 훈련 · 어휘 학습</p></div>
+  <span id="bankStatus" class="text-xs sm:text-sm bg-slate-100 text-slate-600 px-3 py-2 rounded-full">문제은행을 업로드하세요</span>
+ </div>
+</header>
+<main class="max-w-6xl mx-auto px-4 py-6">
+ <nav class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+  <button class="tab active rounded-xl py-3 px-2 font-semibold" data-tab="upload"><i class="fa-solid fa-file-excel mr-2"></i>엑셀 업로드</button>
+  <button class="tab rounded-xl py-3 px-2 font-semibold" data-tab="quiz"><i class="fa-solid fa-pen-to-square mr-2"></i>문제 풀기</button>
+  <button class="tab rounded-xl py-3 px-2 font-semibold" data-tab="shadow"><i class="fa-solid fa-headphones mr-2"></i>섀도윙 & 딕테이션</button>
+  <button class="tab rounded-xl py-3 px-2 font-semibold" data-tab="vocab"><i class="fa-solid fa-clone mr-2"></i>빈출 단어장</button>
+ </nav>
+
+ <section id="tab-upload" class="tab-panel">
+  <div class="card p-5 sm:p-7">
+   <h2 class="text-xl font-bold mb-2">문제은행 엑셀 파일 업로드</h2>
+   <p class="text-slate-600 text-sm mb-5">PART 1~7 시트가 포함된 XLSX, XLS 또는 CSV 파일을 불러옵니다. 원본 파일은 서버로 전송되지 않고 브라우저에서 처리됩니다.</p>
+   <label id="dropZone" for="fileInput" class="border-2 border-dashed border-blue-300 bg-blue-50/60 rounded-2xl p-8 sm:p-12 text-center block cursor-pointer hover:bg-blue-50">
+    <i class="fa-solid fa-cloud-arrow-up text-4xl text-blue-600 mb-4"></i>
+    <div class="font-bold text-lg">파일을 여기에 끌어다 놓거나 클릭하여 선택</div>
+    <div class="text-sm text-slate-500 mt-2">.xlsx · .xls · .csv</div>
+    <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+   </label>
+   <div id="uploadMessage" class="mt-4 text-sm text-slate-600">예상 열: 번호 / 지문 또는 문제 문장 / 질문 / 보기 / 정답 / 해설</div>
+   <div id="sheetSummary" class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+   <div class="mt-6 bg-slate-50 rounded-xl p-4 text-sm text-slate-600">
+    <b class="text-slate-800">엑셀 입력 규칙</b>
+    <ul class="list-disc pl-5 mt-2 space-y-1">
+     <li>시트 이름은 PART 1~PART 7 형식을 권장합니다.</li>
+     <li>복수 질문이 하나의 지문을 공유하면 질문별로 행을 나누고 지문을 각 행에 반복 입력합니다.</li>
+     <li>보기는 (A) ... | (B) ... | (C) ... | (D) ... 형식 또는 A~D가 구분되는 문자열을 사용합니다.</li>
+     <li>정답은 A, B, C, D로 입력합니다. 여러 질문의 정답은 세미콜론으로 구분할 수 있습니다.</li>
+    </ul>
+   </div>
+  </div>
+ </section>
+
+ <section id="tab-quiz" class="tab-panel hidden">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+   <div><h2 class="text-xl font-bold">문제 풀이</h2><p class="text-sm text-slate-500">답을 선택한 뒤 정오 확인, 정답 확인, 해설 확인을 각각 따로 사용할 수 있습니다.</p></div>
+   <div class="flex gap-2">
+    <select id="partFilter" class="border border-slate-300 rounded-xl px-3 py-2 bg-white"><option value="ALL">전체 파트</option></select>
+    <button id="resetQuiz" class="border border-slate-300 rounded-xl px-3 py-2 rounded-xl text-sm"><i class="fa-solid fa-rotate-right mr-1"></i>초기화</button>
+   </div>
+  </div>
+  <div class="card p-4 mb-4">
+   <div class="flex justify-between text-sm mb-2"><span id="quizCount">문항 0 / 0</span><span id="quizScore">정답 0개</span></div>
+   <div class="progress"><div id="quizProgress" style="width:0%"></div></div>
+  </div>
+  <div id="quizList" class="space-y-4"><div class="card p-8 text-center text-slate-500">먼저 엑셀 파일을 업로드하세요.</div></div>
+ </section>
+
+ <section id="tab-shadow" class="tab-panel hidden">
+  <div class="mb-5"><h2 class="text-xl font-bold">LC 섀도윙 & 딕테이션</h2><p class="text-sm text-slate-500">추출된 10개의 고유 LC 문장을 한 번에 확인하고 각 문장별 개별 듣기로 섀도윙 및 딕테이션을 연습하세요.</p></div>
+  <div class="card p-4 sm:p-6 mb-4">
+   <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div><h3 class="font-bold">섀도윙 음성 설정 및 전체 재생</h3><p class="text-xs text-slate-500">추출된 10개 문장 전체 연속 재생 및 음성 옵션 설정</p></div>
+    <button id="refreshSentences" class="text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200"><i class="fa-solid fa-shuffle mr-1"></i>10개 문장 새로 추출</button>
+   </div>
+   <div class="flex flex-wrap gap-2 mb-4">
+    <button id="playAll" class="bg-blue-700 text-white px-4 py-2 rounded-xl text-sm"><i class="fa-solid fa-play mr-1"></i>10개 전체 재생</button>
+    <button id="pauseAudio" class="bg-slate-100 px-4 py-2 rounded-xl text-sm"><i class="fa-solid fa-pause mr-1"></i>일시정지</button>
+    <button id="resumeAudio" class="bg-slate-100 px-4 py-2 rounded-xl text-sm"><i class="fa-solid fa-play mr-1"></i>이어듣기</button>
+    <button id="stopAudio" class="bg-rose-50 text-rose-700 px-4 py-2 rounded-xl text-sm"><i class="fa-solid fa-stop mr-1"></i>정지</button>
+   </div>
+   <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <label class="text-sm">음성 성별
+     <select id="voiceGender" class="block w-full mt-1 border rounded-lg p-2"><option value="female">여성 음성</option><option value="male">남성 음성</option></select>
+    </label>
+    <label class="text-sm">재생 속도
+     <select id="speechRate" class="block w-full mt-1 border rounded-lg p-2"><option value="0.65">0.65x</option><option value="0.8">0.8x</option><option value="0.9">0.9x</option><option value="1" selected>1.0x</option><option value="1.1">1.1x</option></select>
+    </label>
+    <label class="text-sm flex items-center gap-2 mt-5"><input type="checkbox" id="repeatAudio"> 전체 문장 반복</label>
+   </div>
+   <div id="sentenceList" class="hidden" aria-hidden="true"></div>
+  </div>
+  <div class="card p-4 sm:p-6">
+   <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+    <div><h3 class="font-bold">섀도윙 & 딕테이션 전체 목록 (총 10문항)</h3><p class="text-xs text-slate-500">각 문장 상단의 개별 듣기 버튼으로 음성을 듣고 네 곳의 빈칸을 채워보세요.</p></div>
+    <div class="flex gap-2">
+     <button id="checkAllDictation" class="text-sm bg-blue-700 text-white px-3 py-2 rounded-lg hover:bg-blue-800"><i class="fa-solid fa-check-double mr-1"></i>전체 정답 확인</button>
+     <button id="newDictation" class="text-sm bg-slate-100 px-3 py-2 rounded-lg hover:bg-slate-200"><i class="fa-solid fa-rotate mr-1"></i>새 10문제 추출</button>
+    </div>
+   </div>
+   <div id="dictationArea" class="space-y-4 text-sm text-slate-500">LC 문장을 불러오면 10개의 딕테이션 문제가 한 번에 생성됩니다.</div>
+  </div>
+ </section>
+
+ <section id="tab-vocab" class="tab-panel hidden">
+  <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+   <div>
+    <h2 class="text-xl font-bold">TOEIC 빈출 단어장 (업로드 파일 기반 동적 추출)</h2>
+    <p class="text-sm text-slate-500">업로드된 문제은행의 지문·질문·보기에서 토익 핵심 빈출 단어를 매번 새롭게 선별합니다. 카드를 클릭하면 뜻과 실제 출제 문장이 표시됩니다.</p>
+   </div>
+   <div class="flex items-center gap-2">
+    <span id="vocabCount" class="text-sm text-slate-500 mr-2"></span>
+    <button id="refreshVocab" class="text-sm px-3.5 py-2 rounded-xl bg-blue-700 text-white hover:bg-blue-800 font-medium"><i class="fa-solid fa-shuffle mr-1"></i>새 빈출 단어 추출</button>
+   </div>
+  </div>
+  <div id="vocabGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+ </section>
+</main>
+
+<div id="audioDock" class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white rounded-2xl shadow-2xl px-3 py-2 flex items-center gap-2 w-[min(94vw,520px)]">
+ <span class="text-xs font-semibold mr-auto"><i class="fa-solid fa-headphones mr-1"></i><span id="audioStatus">음성 재생</span></span>
+ <button id="globalPause" class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm" title="일시정지"><i class="fa-solid fa-pause mr-1"></i>일시정지</button>
+ <button id="globalResume" class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm" title="이어듣기"><i class="fa-solid fa-play mr-1"></i>재생</button>
+ <button id="globalStop" class="px-3 py-2 rounded-lg bg-rose-500/90 hover:bg-rose-500 text-sm" title="정지"><i class="fa-solid fa-stop"></i></button>
+</div>
+
+<div id="selectionTip"><div id="tipWord" class="font-bold"></div><div id="tipMeaning" class="mt-1"></div></div>
+<footer class="text-center text-xs text-slate-400 py-8">TOEIC Study Desk · 학습용 도구 · 음성 품질은 브라우저 및 운영체제의 TTS 지원에 따릅니다.</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let questionBank = [], sentences = [], dictationItems = [], currentDictation = 0;
+let audioQueue = [], audioIndex = 0, audioRun = 0, isSpeaking = false;
+let quizAnswers = new Map(), quizJudged = new Set(), quizAnswerRevealed = new Set(), quizExplanationRevealed = new Set();
+const toeicCoreDict = {
+  schedule: '일정, 계획', available: '이용 가능한, 시간이 있는', confirm: '확인하다, 확정하다', postpone: '연기하다, 미루다',
+  attend: '참석하다', deadline: '마감일, 최종 기한', notify: '알리다, 통지하다', equipment: '장비, 용품',
+  maintenance: '유지 보수, 정비', facility: '시설, 기관', applicant: '지원자', qualified: '자격을 갖춘',
+  position: '직책, 자리, 위치', requirement: '요건, 필요조건', invoice: '송장, 청구서', shipment: '배송, 선적',
+  supplier: '공급업체', purchase: '구매하다, 구입품', refund: '환불, 환불하다', receipt: '영수증',
+  estimate: '견적, 추정하다', expense: '비용, 경비', budget: '예산', revenue: '수익, 매출',
+  profit: '이익, 수익', transaction: '거래, 처리', discount: '할인', fee: '요금, 수수료',
+  contract: '계약, 계약서', agreement: '합의, 계약', negotiate: '협상하다', policy: '정책, 규정',
+  procedure: '절차, 수순', regulation: '규정, 규칙', authorize: '승인하다, 권한을 부여하다', approve: '승인하다, 찬성하다',
+  revise: '수정하다, 개정하다', submit: '제출하다', candidate: '후보자, 지원자', department: '부서, 학과',
+  supervisor: '관리자, 감독관', colleague: '동료', delivery: '배송, 배달', warehouse: '창고',
+  inventory: '재고, 재고 조사', package: '소포, 포장하다', distribute: '배포하다, 분배하다', destination: '목적지',
+  departure: '출발', reservation: '예약', accommodation: '숙박 시설, 편의', itinerary: '여행 일정표',
+  delay: '지연, 연기하다', inspect: '검사하다, 점검하다', defective: '결함이 있는', reliable: '신뢰할 수 있는',
+  accommodate: '수용하다, 편의를 제공하다', announcement: '공지사항, 발표', appreciate: '고맙게 여기다, 진가를 인정하다',
+  attendance: '출석, 참석자 수', collaborate: '협력하다, 공동으로 일하다', compensation: '보상금, 보수',
+  conference: '회의, 학회', convenient: '편리한, 알맞은', demonstrate: '증명하다, 보여주다',
+  eligible: '자격이 있는, 적격의', evaluate: '평가하다', favorable: '호의적인, 유리한',
+  headquarters: '본사, 본부', implement: '시행하다, 실행하다', incentive: '장려금, 혜택',
+  launch: '출시하다, 개시하다', notification: '통지, 통보', operational: '작동되는, 운영상의',
+  participate: '참가하다', perform: '행하다, 수행하다', productivity: '생산성',
+  proposal: '제안서, 사업 제안', qualification: '자격증, 자격 요건', recommend: '추천하다, 권고하다',
+  reimburse: '변상하다, 환급해주다', relocate: '이전하다, 위치를 바꾸다', representative: '대표자, 직원, 대리인',
+  responsibility: '책임, 의무', specification: '설명서, 사양', stipulate: '규정하다, 명시하다',
+  strategic: '전략적인', subscription: '구독, 가입', subsidiary: '자회사',
+  temporary: '일시적인, 임시의', transfer: '이동하다, 송금하다, 전근', unanimous: '만장일치의',
+  vacancy: '빈 방, 결원, 공석', vendor: '판매업체, 행상인', warranty: '보증서, 품질 보증',
+  wholesale: '도매의', annual: '매년의, 연례의', application: '신청, 지원서',
+  arrangement: '준비, 마련, 합의', assemble: '조립하다, 모으다', assessment: '평가, 사정',
+  assign: '배정하다, 할당하다', assistance: '도움, 지원', associate: '동료, 연관짓다',
+  attach: '첨부하다, 붙이다', audit: '회계 감사, 심사', automated: '자동화된',
+  award: '상, 수여하다', brochure: '안내 책자, 브로슈어', cancellation: '취소',
+  capacity: '수용력, 능력', certificate: '증명서, 자격증', client: '고객, 의뢰인',
+  commercial: '상업의, 광고', commission: '수수료, 위원회', committee: '위원회',
+  compatible: '호환되는', competitive: '경쟁력 있는', complaint: '불만, 항의',
+  complimentary: '무료의, 칭찬하는', comprehensive: '포괄적인, 종합적인', compulsory: '의무적인, 강제의',
+  confidential: '기밀의, 비밀의', consecutive: '연속적인', consensus: '합의, 의견 일치',
+  conservation: '보존, 보호', considerable: '상당한', consistent: '일관된, 일치하는',
+  consultant: '고문, 컨설턴트', consumer: '소비자', contribution: '기여, 기부',
+  coordinate: '조정하다, 조직하다', corporate: '기업의, 법인의', correspondence: '서신, 일치',
+  credentials: '자격증, 신임장', currency: '통화, 화폐', customer: '고객',
+  customized: '맞춤 제작된', decline: '감소하다, 거절하다', dedicate: '헌신하다, 바치다',
+  deficit: '적자, 부족', delegate: '위임하다, 대표자', demonstration: '시연, 증명',
+  designated: '지정된', detailed: '상세한', deteriorate: '악화되다',
+  determine: '결정하다, 알아내다', device: '장치, 기기', directory: '안내 책자, 주소록',
+  discrepancy: '불일치, 차이', display: '전시하다, 표시하다', disruption: '중단, 혼란',
+  diverse: '다양한', domestic: '국내의, 가정의', donation: '기부, 기증',
+  duplicate: '복사하다, 사본', durable: '내구성이 있는', economical: '경제적인, 절약되는',
+  effective: '효과적인, 발효되는', efficiency: '효율성', elaborate: '정교한, 상세히 설명하다',
+  emerge: '나타나다, 부상하다', emphasis: '강조, 중점', enclose: '동봉하다, 둘러싸다',
+  endorse: '지지하다, 배서하다', enhance: '향상시키다, 높이다', enroll: '등록하다, 입학하다',
+  enterprise: '기업, 사업', enthusiasm: '열정, 열의', entire: '전체의',
+  environment: '환경', essential: '필수적인, 본질적인', establish: '설립하다, 확립하다',
+  evaluation: '평가', exceed: '초과하다, 넘다', exceptional: '예외적인, 뛰어난',
+  exclusive: '독점적인, 전용의', executive: '임원, 경영진', exhibition: '전시회',
+  expand: '확장하다, 확대하다', expedite: '신속히 처리하다', expertise: '전문 지식, 전문 기술',
+  extension: '연장, 내선 번호', external: '외부의', feature: '특징, 특집으로 다루다',
+  feedback: '피드백, 의견', finalize: '마무리하다, 확정하다', financial: '재정의, 금융의',
+  fluctuate: '변동하다, 오르내리다', focus: '집중하다, 초점', forecast: '예측, 예보하다',
+  formerly: '이전에', fragile: '깨지기 쉬운', franchise: '가맹점, 프랜차이즈',
+  frequent: '빈번한, 잦은', fulfill: '이행하다, 충족시키다', function: '기능, 행사',
+  fundraising: '모금', generate: '발생시키다, 창출하다', generous: '관대한, 넉넉한',
+  genuine: '진짜의, 진실된', guarantee: '보장하다, 보증서', guideline: '지침, 가이드라인',
+  hesitate: '망설이다, 주저하다', highlight: '강조하다, 주요 부분', hospitality: '환대, 접대',
+  identify: '확인하다, 식별하다', illustrate: '설명하다, 삽화를 넣다', immediate: '즉각적인',
+  impact: '영향, 충격', improve: '개선하다, 향상시키다', include: '포함하다',
+  increase: '증가하다', indicate: '나타내다, 가리키다', individual: '개인의, 개인',
+  industry: '산업, 공업', inexpensive: '비싸지 않은, 저렴한', inform: '알리다, 통지하다',
+  initiative: '진취성, 새로운 계획', innovative: '혁신적인', inquiry: '문의, 질문',
+  installation: '설치', instruction: '지시, 설명서', insurance: '보험',
+  integrate: '통합하다', intend: '의도하다', interim: '임시의, 중간의',
+  internal: '내부의', interrupt: '방해하다, 중단시키다', introduce: '소개하다, 도입하다',
+  invest: '투자하다', invitation: '초대, 초대장', issue: '문제, 발행하다',
+  journal: '학술지, 일간지', laboratory: '실험실', launch: '출시하다',
+  leaflet: '전단지, 소책자', lease: '임대차 계약, 임대하다', lecture: '강의, 강연',
+  legislation: '법률, 입법', liability: '책임, 부채', license: '면허, 허가증',
+  limited: '제한된', location: '위치, 장소', logistics: '물류, 유통',
+  loyal: '충성스러운', lucrative: '수익성이 좋은', luggage: '수하물',
+  manual: '설명서, 수동의', manufacture: '제조하다', marketing: '마케팅, 판매',
+  maximize: '극대화하다', meanwhile: '한편, 그 동안에', merchandise: '상품, 물품',
+  merge: '합병하다', minimum: '최소의, 최소한도', modify: '수정하다, 변경하다',
+  monitor: '감시하다, 추적 관찰하다', mortgage: '주택 담보 대출', motivate: '동기를 부여하다',
+  necessary: '필요한', network: '네트워크, 인맥', newsletter: '소식지',
+  nomination: '지명, 추천', notice: '공지, 알아차리다', objective: '목표, 객관적인',
+  obtain: '얻다, 획득하다', occasion: '경우, 행사', occupancy: '점유, 거주',
+  occur: '발생하다, 일어나다', offer: '제공하다, 제안', official: '공식적인, 공무원',
+  operate: '운영하다, 작동하다', opportunity: '기회', optional: '선택적인',
+  order: '주문, 순서', organization: '조직, 단체', orientation: '예비 교육, 오리엔테이션',
+  original: '원래의, 독창적인', outcome: '결과', outline: '개요, 윤곽을 나타내다',
+  outstanding: '뛰어난, 미지불된', overall: '전반적인', overdue: '기한이 지난, 연체된',
+  oversee: '감독하다', overview: '개요', package: '소포, 패키지',
+  pamphlet: '소책자', panel: '토론자단, 패널', parcel: '소포, 꾸러미',
+  participant: '참가자', partner: '동반자, 파트너', passenger: '승객',
+  patent: '특허, 특허권', payment: '지불, 납입', payroll: '급여 대장, 임금 총액',
+  penalty: '벌금, 불이익', pending: '미결의, ~을 기다리는 동안', permanent: '영구적인',
+  permission: '허가, 승인', permit: '허가하다, 허가증', personnel: '인사과, 전 직원',
+  persuade: '설득하다', pharmaceutical: '제약의', phase: '단계, 국면',
+  phenomenon: '현상', physical: '신체의, 물리적인', placement: '배치, 취업 알선',
+  pledge: '약속, 서약하다', plentiful: '풍부한', pollutant: '오염 물질',
+  popular: '인기 있는', portable: '휴대용의', portion: '부분, 1인분',
+  potential: '잠재적인, 가능성', practical: '실용적인', precaution: '예방 조치',
+  precious: '귀중한', precise: '정확한, 정밀한', predecessor: '전임자, 이전 것',
+  predict: '예측하다', prefer: '선호하다', preliminary: '예비의, 임시의',
+  premises: '구내, 건물과 부지', premium: '보험료, 할증금, 고급의', preparation: '준비',
+  prescription: '처방전', presentation: '발표, 프레젠테이션', preserve: '보존하다',
+  prestigious: '명망 있는, 일류의', prevent: '예방하다, 막다', previous: '이전의',
+  primary: '주요한, 기본적인', principal: '주요한, 교장, 원금', principle: '원칙, 원리',
+  priority: '우선순위', privacy: '사생활', privilege: '특권, 혜택',
+  probation: '수습 기간, 집행 유예', proceed: '진행하다, 나아가다', process: '과정, 처리하다',
+  produce: '생산하다, 농산물', productive: '생산적인', profession: '직업, 전문직',
+  proficient: '능숙한, 숙달된', profile: '윤곽, 프로필', profitable: '수익성이 있는',
+  prohibit: '금지하다', projection: '예상, 추정치', prominent: '저명한, 두드러진',
+  promote: '승진시키다, 홍보하다', prompt: '즉각적인, 촉발하다', proof: '증거, 증명',
+  properly: '제대로, 적절히', property: '재산, 부동산', proportion: '비율, 부분',
+  propose: '제안하다', prospect: '전망, 가망', prosperous: '번영하는',
+  protect: '보호하다', protocol: '의정서, 규약', prove: '증명하다',
+  provide: '제공하다', provisional: '임시의, 잠정적인', proximity: '가까움, 근접성',
+  publicity: '홍보, 명성', publish: '출판하다, 발표하다', punctual: '시간을 엄수하는',
+  purpose: '목적', pursue: '추구하다', quantity: '양, 수량',
+  quarterly: '분기별의', questionnaire: '설문지', quotation: '견적서, 인용문',
+  raise: '올리다, 모금하다, 인상', range: '범위, 다양성', rare: '드문, 희귀한',
+  rate: '요금, 비율, 평가하다', ratio: '비율', raw: '가공하지 않은, 날것의',
+  reach: '도달하다, 연락하다', reaction: '반응', readily: '기꺼이, 손쉽게',
+  realistic: '현실적인', reasonable: '합리적인, 적당한', rebate: '환불, 리베이트',
+  recall: '회수하다, 기억해내다', receive: '받다', recent: '최근의',
+  reception: '환영회, 접수처', recipient: '수령인', recognize: '인정하다, 알아보다',
+  recommendation: '추천, 권고', reconcile: '조화시키다, 일치시키다', record: '기록, 기록하다',
+  recover: '회복하다', recruit: '모집하다, 채용하다', rectangular: '직사각형의',
+  reduce: '줄이다, 감소시키다', redundant: '불필요한, 정리 해고된', refer: '참조하다, 언급하다',
+  reference: '참고, 추천서', refine: '정제하다, 개선하다', reflect: '반영하다, 반사하다',
+  refreshments: '다과, 가벼운 음식물', regarding: '~에 관하여', regional: '지역의',
+  register: '등록하다', regular: '정기적인, 보통의', regulate: '규제하다, 조절하다',
+  rehearsal: '예행연습', reject: '거절하다, 불합격시키다', relate: '관련시키다',
+  release: '출시하다, 발표하다, 석방', relevant: '관련된, 적절한', reluctance: '꺼림, 마지못해 함',
+  remain: '남다, 여전히 ~이다', remark: '발언, 논평', reminder: '상기시켜 주는 것, 독촉장',
+  remote: '외딴, 원격의', removal: '제거, 이동', remuneration: '보수, 급료',
+  renovate: '개조하다, 보수하다', rent: '임대하다, 집세', repair: '수리하다',
+  repeat: '반복하다', replace: '대체하다, 교체하다', reply: '대답하다, 답장',
+  report: '보고서, 보고하다', represent: '대표하다, 나타내다', reputation: '평판, 명성',
+  request: '요청하다, 요청', require: '요구하다, 필요로 하다', research: '연구, 조사',
+  reschedule: '일정을 변경하다', reserve: '예약하다, 비축물', reside: '거주하다',
+  resident: '거주자', resign: '사임하다, 물러나다', resolution: '해결, 결의안, 해상도',
+  resolve: '해결하다, 결심하다', resource: '자원', respect: '존경, 측면',
+  respond: '응답하다', responsible: '책임이 있는', restore: '복구하다, 회복시키다',
+  restrict: '제한하다', restructure: '구조 조정을 하다', result: '결과',
+  retail: '소매', retain: '유지하다, 보유하다', retire: '은퇴하다',
+  retrieve: '되찾다, 검색하다', return: '돌아오다, 반품하다', reveal: '드러내다, 밝히다',
+  review: '검토하다, 비평', reward: '보상, 보상하다', rigorous: '엄격한, 철저한',
+  risk: '위험', route: '경로, 노선', routine: '일상적인, 일과',
+  rural: '시골의', safety: '안전', salary: '급여, 봉급',
+  sample: '견본, 샘플', satisfaction: '만족', savings: '저축, 절약',
+  scarce: '부족한, 드문', scattered: '흩어진', scenic: '경치가 좋은',
+  scope: '범위, 영역', screen: '화면, 심사하다', seasonal: '계절의',
+  secure: '안전한, 확보하다', seek: '찾다, 추구하다', segment: '부분, 부문',
+  select: '선택하다', seminar: '세미나, 연구회', senior: '상급의, 고위직의',
+  separate: '분리된, 분리하다', sequence: '순서, 연속', series: '연속, 시리즈',
+  session: '회의, 시간, 학기', settle: '해결하다, 정착하다', severe: '심각한, 엄격한',
+  share: '공유하다, 주식', shortage: '부족, 결핍', showcase: '진열장, 소개하다',
+  shrink: '줄어들다', significant: '중요한, 상당한', simplify: '단순화하다',
+  simultaneously: '동시에', site: '부지, 현장, 웹사이트', situation: '상황',
+  skilled: '숙련된', slight: '약간의', smoothly: '순조롭게',
+  software: '소프트웨어', sole: '유일한, 단독의', solicit: '요청하다, 간청하다',
+  solution: '해결책, 용액', sophisticated: '정교한, 세련된', source: '원천, 출처',
+  spacious: '넓은', spare: '여분의, 할애하다', specialize: '전공하다, 전문으로 하다',
+  specific: '구체적인, 특정한', speculate: '추측하다, 투기하다', sponsor: '후원자, 후원하다',
+  staff: '직원', stage: '단계, 무대', standard: '기준, 표준의',
+  statement: '성명, 내역서', stationary: '움직이지 않는', stationery: '문구류',
+  statistics: '통계, 통계학', status: '지위, 상태', steady: '꾸준한, 안정된',
+  stock: '재고, 주식', storage: '보관, 저장', straightforward: '간단한, 솔직한',
+  strategy: '전략', streamline: '간소화하다, 능률화하다', strict: '엄격한',
+  strike: '파업, 치다', structure: '구조, 건축물', study: '연구, 공부',
+  subject: '주제, 대상, ~의 영향을 받는', subordinate: '부하 직원, 하급의', subsequent: '그 다음의, 차후의',
+  substantial: '상당한, 실질적인', substitute: '대체하다, 대리인', succeed: '성공하다, 뒤를 잇다',
+  sufficient: '충분한', suggest: '제안하다', suitable: '적합한',
+  summarize: '요약하다', supervise: '감독하다', supplement: '보충하다, 추가물',
+  supply: '공급하다, 비품', support: '지원하다, 지지하다', suppose: '가정하다',
+  surpass: '능가하다, 초과하다', surplus: '잉여, 흑자', survey: '설문조사, 측량',
+  suspend: '중단하다, 정직시키다', sustainable: '지속 가능한', symptom: '증상, 징후',
+  synchronize: '동기화하다', system: '시스템, 제도', tackle: '다루다, 해결하다',
+  tailor: '맞추다, 재단사', talent: '재능, 인재', target: '목표, 대상',
+  task: '업무, 과제', tax: '세금', technical: '기술적인',
+  technique: '기법, 기술', technology: '기술', temporary: '일시적인',
+  tenant: '세입자, 임차인', tentative: '임시의, 잠정적인', terminal: '터미널, 말기의',
+  terminate: '종료하다, 해고하다', territory: '영토, 영역', testify: '증언하다',
+  thorough: '철저한, 빈틈없는', threshold: '문턱, 한계점', thrive: '번창하다',
+  tight: '꽉 끼는, 빠듯한', timely: '시기적절한', title: '제목, 직함',
+  token: '표시, 토큰', tolerate: '참다, 용인하다', tool: '도구',
+  topic: '주제', total: '총계의, 전체의', tour: '견학, 여행',
+  trace: '추적하다, 흔적', track: '추적하다, 길', trade: '무역, 거래',
+  tradition: '전통', traffic: '교통, 통행량', training: '훈련, 연수',
+  transcript: '성적 증명서, 사본', transfer: '이동하다, 전근하다', transform: '변형시키다',
+  transit: '운송, 통과', transition: '전환, 변천', translate: '번역하다',
+  transmit: '전송하다', transparent: '투명한', transport: '수송하다',
+  travel: '여행하다', trend: '추세, 경향', trial: '재판, 시험 사용',
+  tribute: '찬사, 헌사', trigger: '유발하다, 계기', trim: '다듬다, 삭감하다',
+  triple: '세 배가 되다', troubleshoot: '문제를 해결하다', turnover: '이직률, 매출액',
+  ultimate: '궁극적인', unable: '~할 수 없는', unacceptable: '받아들일 수 없는',
+  unanimous: '만장일치의', unauthorized: '허가받지 않은', uncertain: '불확실한',
+  undergo: '겪다, 받다', underlying: '근본적인', undertake: '착수하다, 맡다',
+  unemployment: '실업', unexpected: '예기치 않은', unfavorable: '불리한',
+  unfortunate: '불운한', uniform: '제복, 균일한', unique: '독특한, 유일한',
+  unit: '단위, 부서', unite: '결합하다, 단결하다', universal: '보편적인, 전 세계의',
+  unveil: '공개하다, 발표하다', update: '갱신하다, 최신 정보', upgrade: '승급하다, 개선하다',
+  uphold: '유지하다, 지지하다', urban: '도시의', urge: '촉구하다',
+  urgent: '긴급한', usage: '사용법, 용법', utility: '공공요금, 유용성',
+  utilize: '활용하다, 이용하다', vacant: '비어 있는, 결원의', vacation: '휴가',
+  valid: '유효한, 타당한', valuable: '귀중한', value: '가치, 평가하다',
+  variable: '변동이 심한, 변수', variety: '다양성', various: '다양한',
+  vehicle: '차량, 운송 수단', venue: '장소, 개최지', verify: '확인하다, 입증하다',
+  versatile: '다재다능한', version: '버전, 판', via: '~을 통하여',
+  vibrant: '활기찬', vicinity: '인근, 부근', view: '견해, 경치, 보다',
+  violate: '위반하다', virtual: '가상의, 실질적인', visible: '눈에 보이는',
+  vision: '시력, 비전', visit: '방문하다', vital: '필수적인, 활기찬',
+  vivid: '생생한', vocational: '직업의', volume: '양, 부피, 음량',
+  voluntary: '자발적인', volunteer: '자원봉사자, 자원하다', vote: '투표하다',
+  voucher: '상품권, 할인권', vulnerable: '취약한', wage: '임금, 급료',
+  waive: '포기하다, 면제하다', warehouse: '창고', warn: '경고하다',
+  warrant: '보증하다, 영장', waste: '낭비하다, 쓰레기', wealth: '부, 재산',
+  wear: '입다, 닳다', weather: '날씨', website: '웹사이트',
+  weekly: '주간의', weigh: '무게를 달다, 숙고하다', welcome: '환영하다',
+  welfare: '복지', widespread: '광범위한', willing: '기꺼이 ~하는',
+  withdraw: '인출하다, 철회하다', witness: '목격자, 목격하다', workforce: '노동력, 전 직원',
+  workload: '업무량', workplace: '직장', workshop: '워크숍, 작업장',
+  worthwhile: '가치 있는', wrap: '포장하다', yield: '산출하다, 양보하다', zone: '구역, 지대'
+};
+
+let dynamicVocabList = [];
+function switchTab(name){
+ document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
+ document.querySelectorAll('.tab-panel').forEach(s=>s.classList.toggle('hidden',s.id!=='tab-'+name));
+}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+const drop=$('dropZone');
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('border-blue-600','bg-blue-100')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('border-blue-600','bg-blue-100'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('border-blue-600','bg-blue-100');if(e.dataTransfer.files[0])loadWorkbook(e.dataTransfer.files[0])});
+$('fileInput').addEventListener('change',e=>{if(e.target.files[0])loadWorkbook(e.target.files[0])});
+
+function normalizeHeader(x){return String(x??'').trim().replace(/\s+/g,'').toLowerCase()}
+function getVal(row, aliases){
+ const keys=Object.keys(row);
+ for(const a of aliases){const found=keys.find(k=>normalizeHeader(k)===normalizeHeader(a));if(found!==undefined)return row[found]}
+ return '';
+}
+function parseChoices(raw){
+ if(Array.isArray(raw))return raw;
+ const s=String(raw??'').trim(); if(!s)return [];
+ let matches=[...s.matchAll(/\(?\s*([A-D])\s*\)?\s*[\.\):]\s*([\s\S]*?)(?=(?:\s*\|\s*|\s+\(?[A-D]\s*[\.\):]\s*)|$)/gi)];
+ if(matches.length>=2)return matches.map(m=>({key:m[1].toUpperCase(),text:m[2].trim()}));
+ return s.split(/\s*\|\s*/).map((v,i)=>({key:String.fromCharCode(65+i),text:v.replace(/^\(?[A-D]\)?[.)：:\s]*/i,'').trim()})).filter(x=>x.text);
+}
+function splitAnswers(raw){return String(raw??'').split(/[;,，]/).map(x=>x.trim().toUpperCase().replace(/[^A-D]/g,'' )).filter(Boolean)}
+function cleanPassage(s){return String(s??'').trim()}
+function parseGroupedChoices(raw){
+ const s=String(raw??'').trim();
+ if(!s)return [];
+ // Multi-question rows in the supplied workbook use (1) ... | (2) ... groups.
+ const groups=[...s.matchAll(/\(\s*\d+\s*\)\s*([\s\S]*?)(?=\s*\|\s*\(\s*\d+\s*\)|$)/g)];
+ if(groups.length){
+  return groups.map(g=>{
+   const body=g[1].trim();
+   const labeled=parseChoices(body);
+   if(labeled.length>=2)return labeled;
+   return body.split(/\s*\/\s*/).map((v,i)=>({key:String.fromCharCode(65+i),text:v.trim()})).filter(x=>x.text);
+  });
+ }
+ return [parseChoices(s)];
+}
+function parseSheet(sheetName, rows){
+ const partMatch=sheetName.match(/PART\s*([1-7])/i); if(!partMatch)return [];
+ const part=Number(partMatch[1]), output=[];
+ rows.forEach((r,i)=>{
+  const number=getVal(r,['번호','No','Number'])||i+1;
+  const passage=cleanPassage(getVal(r,['지문 또는 문제 문장','지문/문제 문장','문제/지문','지문','문제 문장','Passage']));
+  const questionRaw=String(getVal(r,['질문','Question'])??'').trim();
+  const choiceRaw=getVal(r,['보기','선택지','Choices','Options']);
+  const answerRaw=getVal(r,['정답','Answer']);
+  const explanation=String(getVal(r,['해설','Explanation'])??'').trim();
+  const answers=splitAnswers(answerRaw);
+  const questions=questionRaw?questionRaw.split(/\s*\|\s*/).map(x=>x.trim()).filter(Boolean):[];
+  const grouped=parseGroupedChoices(choiceRaw);
+  if(!passage&&!questionRaw&&!String(choiceRaw||''))return;
+
+  // Parts 3, 4, and 7: one shared passage with multiple questions/options in one row.
+  if([3,4,7].includes(part) && (questions.length>1 || grouped.length>1)){
+   const count=Math.max(questions.length,grouped.length,answers.length);
+   for(let j=0;j<count;j++){
+    output.push({id:`${part}-${number}-${i}-${j}`,part,number:`${number}-${j+1}`,passage,
+      question:questions[j]||`질문 ${j+1}`,choices:grouped[j]||[],answer:answers[j]||'',explanation});
+   }
+   return;
+  }
+  // Part 6: a single passage can contain four independent blanks and four answer sets.
+  if(part===6 && !questions.length && grouped.length>1){
+   grouped.forEach((choices,j)=>output.push({id:`${part}-${number}-${i}-${j}`,part,number:`${number}-${j+1}`,passage,
+    question:`빈칸 (${j+1})에 들어갈 가장 적절한 표현을 고르세요.`,choices,answer:answers[j]||'',explanation}));
+   return;
+  }
+  const choices=grouped[0]||[];
+  const question=questions[0]||(part===5||part===6?'빈칸에 들어갈 가장 적절한 표현을 고르세요.':'');
+  output.push({id:`${part}-${number}-${i}`,part,number,passage,question,choices,answer:answers[0]||'',explanation});
+ });
+ return output;
+}
+async function loadWorkbook(file){
+ try{
+  const data=await file.arrayBuffer();
+  const wb=XLSX.read(data,{type:'array'});
+  const parsed=[];
+  const summaries=[];
+  wb.SheetNames.forEach(name=>{
+   if(!/PART\s*[1-7]/i.test(name))return;
+   const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:'',raw:false});
+   const items=parseSheet(name,rows); parsed.push(...items); summaries.push({name,count:items.length});
+  });
+  if(!parsed.length)throw new Error('PART 1~7 시트를 찾지 못했거나 인식 가능한 문항이 없습니다.');
+  questionBank=parsed; quizAnswers.clear();quizJudged.clear();quizAnswerRevealed.clear();quizExplanationRevealed.clear();
+  $('bankStatus').textContent=`${file.name} · ${parsed.length}문항`;
+  $('uploadMessage').innerHTML=`<span class="text-green-700 font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>업로드 완료</span> — ${parsed.length}개 문항을 불러왔습니다.`;
+  $('sheetSummary').innerHTML=summaries.map(x=>`<div class="bg-slate-50 rounded-xl p-3"><div class="text-xs text-slate-500">${x.name}</div><div class="text-xl font-bold">${x.count}<span class="text-xs font-normal text-slate-500 ml-1">문항</span></div></div>`).join('');
+  $('partFilter').innerHTML='<option value="ALL">전체 파트</option>'+[1,2,3,4,5,6,7].map(n=>`<option value="${n}">PART ${n}</option>`).join('');
+  extractUniqueSentences();extractDynamicVocab();renderQuiz();renderSentences();renderDictation();renderVocab();
+ }catch(err){$('uploadMessage').innerHTML=`<span class="text-red-600 font-semibold">업로드 오류:</span> ${escapeHtml(err.message)}`}
+}
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function isEnglish(s){return /[A-Za-z]{3,}/.test(s)}
+function extractUniqueSentences(){
+ const set=new Set(),out=[];
+ questionBank.filter(q=>q.part>=2&&q.part<=4).forEach(q=>{
+  const text=q.passage||'';
+  // 화자 표기 및 안내문을 문장 단위로 분리한다.
+  const cleaned=text.replace(/(?:^|\s)(?:WOMAN|FEMALE|W|F|MAN|MALE|M)\s*:\s*/gi,' ').replace(/\s+/g,' ').trim();
+  cleaned.split(/(?<=[.!?])\s+/).forEach(s=>{
+   const t=s.trim(); if(t.length<18||!isEnglish(t))return;
+   const normalized=t.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+   if(!set.has(normalized)){set.add(normalized);out.push(t)}
+  });
+ });
+ sentences=shuffle(out).slice(0,10);
+ dictationItems=sentences.map(makeDictation);
+}
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function renderQuiz(){
+ const part=$('partFilter').value;
+ const items=questionBank.filter(q=>part==='ALL'||q.part===Number(part));
+ $('quizCount').textContent=`응답 ${[...quizAnswers.keys()].filter(k=>items.some(q=>q.id===k)).length} / ${items.length}`;
+ const answered=items.filter(q=>quizAnswers.has(q.id)).length;
+ const correct=items.filter(q=>quizAnswers.get(q.id)===q.answer&&q.answer).length;
+ $('quizScore').textContent=`정답 ${correct}개`;
+ $('quizProgress').style.width=(items.length?answered/items.length*100:0)+'%';
+ if(!items.length){$('quizList').innerHTML='<div class="card p-8 text-center text-slate-500">해당 파트의 문항이 없습니다.</div>';return}
+ $('quizList').innerHTML=items.map((q,idx)=>{
+  const selected=quizAnswers.get(q.id),judged=quizJudged.has(q.id),answerRevealed=quizAnswerRevealed.has(q.id),explanationRevealed=quizExplanationRevealed.has(q.id),lc=q.part<=4;
+  const choices=q.choices.map(c=>{
+   let cls='choice';if(answerRevealed&&c.key===q.answer)cls+=' correct';else if(judged&&selected===c.key&&selected!==q.answer)cls+=' wrong';else if(selected===c.key)cls+=' border-blue-500 bg-blue-50';
+   return `<button class="${cls}" data-q="${escapeHtml(q.id)}" data-choice="${escapeHtml(c.key)}" ${selected?'disabled':''}><span class="font-bold mr-2">${escapeHtml(c.key)}.</span>${escapeHtml(c.text)}</button>`;
+  }).join('');
+  const passageBlock=q.passage?`
+   <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 mb-4">
+    <div class="flex flex-wrap justify-between items-center gap-2 mb-2">
+     <span class="text-sm font-bold text-slate-700">${lc?'Listening Script':'지문'}</span>
+     <div class="flex gap-2">
+      ${lc?`<button class="text-xs px-3 py-2 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200" data-audio="${escapeHtml(q.id)}"><i class="fa-solid fa-volume-high mr-1"></i>지문 듣기</button><button class="text-xs px-3 py-2 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300" data-toggle-passage="${escapeHtml(q.id)}"><i class="fa-solid fa-eye mr-1"></i><span>지문 보기</span></button>`:''}
+     </div>
+    </div>
+    <div id="passage-${escapeHtml(q.id)}" class="${lc?'hidden':''} whitespace-pre-line leading-relaxed text-slate-700">${escapeHtml(q.passage)}</div>
+   </div>`:'';
+  return `<article class="card p-4 sm:p-5">
+   <div class="flex items-center justify-between mb-3"><span class="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full">PART ${q.part} · 문항 ${escapeHtml(q.number)}</span><span class="text-xs text-slate-400">${idx+1} / ${items.length}</span></div>
+   ${passageBlock}
+   ${q.question?`
+    <div class="mb-4">
+     ${q.part===2?`
+      <div class="mb-2">
+       <button class="text-xs px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200" data-toggle-question="${escapeHtml(q.id)}"><i class="fa-solid fa-eye mr-1"></i><span>문제 보기</span></button>
+      </div>
+      <h3 id="question-${escapeHtml(q.id)}" class="hidden font-semibold leading-relaxed">${escapeHtml(q.question)}</h3>
+     `:`<h3 class="font-semibold leading-relaxed">${escapeHtml(q.question)}</h3>`}
+    </div>`:''}
+   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${choices||'<p class="text-sm text-rose-600">선택지를 읽지 못했습니다. 엑셀의 보기 열을 확인하세요.</p>'}</div>
+   <div class="flex flex-wrap items-center gap-2 mt-4">
+    <button class="text-sm px-3 py-2 rounded-lg ${judged?'bg-slate-200':'bg-emerald-700 text-white'}" data-judge="${escapeHtml(q.id)}" ${!selected?'disabled':''}>${judged?'정오 확인됨':'정오 확인'}</button>
+    <button class="text-sm px-3 py-2 rounded-lg ${answerRevealed?'bg-slate-200':'bg-blue-700 text-white'}" data-answer="${escapeHtml(q.id)}">${answerRevealed?'정답 확인됨':'정답 확인'}</button>
+    <button class="text-sm px-3 py-2 rounded-lg ${explanationRevealed?'bg-slate-200':'bg-violet-700 text-white'}" data-explanation="${escapeHtml(q.id)}">${explanationRevealed?'해설 숨기기':'해설 확인'}</button>
+   </div>
+   ${judged&&selected?`<div class="mt-3 rounded-xl ${selected===q.answer?'bg-green-50 text-green-800':'bg-rose-50 text-rose-800'} p-3 text-sm font-semibold">${selected===q.answer?'정답입니다.':'오답입니다.'}</div>`:''}
+   ${answerRevealed?`<div class="mt-3 rounded-xl bg-blue-50 p-3 text-sm"><div class="font-bold">정답: ${escapeHtml(q.answer||'정답 데이터 없음')}</div></div>`:''}
+   ${explanationRevealed?`<div class="mt-3 rounded-xl bg-violet-50 p-3 text-sm"><div class="font-bold mb-1">해설</div><div class="whitespace-pre-line">${escapeHtml(q.explanation||'등록된 해설이 없습니다.')}</div></div>`:''}
+  </article>`;
+ }).join('');
+ $('quizList').querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>{const q=questionBank.find(x=>x.id===b.dataset.q);if(q&&!quizAnswers.has(q.id)){quizAnswers.set(q.id,b.dataset.choice);renderQuiz()}}));
+ $('quizList').querySelectorAll('[data-judge]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.judge;if(quizAnswers.has(id)){quizJudged.add(id);renderQuiz()}}));
+ $('quizList').querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>{quizAnswerRevealed.add(b.dataset.answer);renderQuiz()}));
+ $('quizList').querySelectorAll('[data-explanation]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.explanation;if(quizExplanationRevealed.has(id))quizExplanationRevealed.delete(id);else quizExplanationRevealed.add(id);renderQuiz()}));
+ $('quizList').querySelectorAll('[data-toggle-passage]').forEach(b=>b.addEventListener('click',()=>{
+  const el=$('passage-'+b.dataset.togglePassage);const hidden=el.classList.toggle('hidden');
+  b.innerHTML=hidden?'<i class="fa-solid fa-eye mr-1"></i><span>지문 보기</span>':'<i class="fa-solid fa-eye-slash mr-1"></i><span>지문 숨기기</span>';
+ }));
+ $('quizList').querySelectorAll('[data-toggle-question]').forEach(b=>b.addEventListener('click',()=>{
+  const el=$('question-'+b.dataset.toggleQuestion);const hidden=el.classList.toggle('hidden');
+  b.innerHTML=hidden?'<i class="fa-solid fa-eye mr-1"></i><span>문제 보기</span>':'<i class="fa-solid fa-eye-slash mr-1"></i><span>문제 숨기기</span>';
+ }));
+ $('quizList').querySelectorAll('[data-audio]').forEach(b=>b.addEventListener('click',()=>{const q=questionBank.find(x=>x.id===b.dataset.audio);if(q)playText(q.passage)}));
+}
+$('partFilter').addEventListener('change',renderQuiz);
+$('resetQuiz').addEventListener('click',()=>{quizAnswers.clear();quizJudged.clear();quizAnswerRevealed.clear();quizExplanationRevealed.clear();renderQuiz()});
+
+function makeDictation(sentence){
+ const words=sentence.match(/[A-Za-z]+(?:['’-][A-Za-z]+)?|[^A-Za-z\s]+/g)||[];
+ const indexes=[.12,.38,.64,.88].map(p=>Math.min(words.length-1,Math.max(0,Math.floor((words.length-1)*p))));
+ const unique=[...new Set(indexes)].sort((a,b)=>a-b);
+ return {sentence,words,blankIndexes:unique,answers:unique.map(i=>words[i])};
+}
+function renderSentences(){
+ // 추출 문장은 별도 목록으로 노출하지 않는다.
+ // sentences 배열은 전체 재생 및 딕테이션 생성에 계속 사용한다.
+ $('sentenceList').innerHTML='';
+}
+function renderDictation(){
+ if(!dictationItems.length){$('dictationArea').innerHTML='<div class="p-6 text-center text-slate-500 bg-slate-50 rounded-xl">LC 문장을 불러오면 10개의 딕테이션 문제가 한 번에 생성됩니다.</div>';return}
+ $('dictationArea').innerHTML=dictationItems.map((d,idx)=>{
+  const blankSet=new Set(d.blankIndexes);
+  let n=0;
+  const html=d.words.map((w,i)=>blankSet.has(i)?`<input class="w-24 sm:w-28 border-b-2 border-blue-400 bg-blue-50 text-center rounded px-1 py-1 mx-1 font-semibold text-blue-900 focus:outline-none focus:border-blue-700" data-blank="${n++}" placeholder="빈칸">`:escapeHtml(w)).join(' ');
+  return `<article class="rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5" data-dictation-card="${idx}">
+   <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <div class="flex items-center gap-2">
+     <span class="text-xs font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-full">문장 ${idx+1} / ${dictationItems.length}</span>
+     <span class="text-xs text-slate-500">빈칸 ${d.blankIndexes.length}개</span>
+    </div>
+    <div class="flex flex-wrap gap-1.5">
+     <button class="text-xs px-3 py-1.5 rounded-lg bg-blue-700 text-white hover:bg-blue-800 font-medium" data-play-dict="${idx}"><i class="fa-solid fa-volume-high mr-1"></i>듣기 (${idx+1}번)</button>
+     <button class="text-xs px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100" data-slow-dict="${idx}"><i class="fa-solid fa-gauge-simple mr-1"></i>0.65x 저속</button>
+    </div>
+   </div>
+   <div class="leading-loose text-base text-slate-800 bg-white p-3.5 rounded-xl border border-slate-200/80 mb-3">${html}</div>
+   <div class="flex flex-wrap items-center justify-between gap-2">
+    <div class="flex flex-wrap gap-2">
+     <button class="text-xs bg-emerald-700 text-white rounded-lg px-3 py-1.5 hover:bg-emerald-800" data-check-dict="${idx}">정답 확인</button>
+     <button class="text-xs bg-slate-200 text-slate-700 rounded-lg px-3 py-1.5 hover:bg-slate-300" data-show-dict="${idx}">정답 보기</button>
+    </div>
+    <div class="text-xs font-semibold text-slate-700" id="dictFeedback-${idx}"></div>
+   </div>
+  </article>`;
+ }).join('');
+
+ $('dictationArea').querySelectorAll('[data-play-dict]').forEach(btn=>{
+  btn.onclick=()=>{
+   const idx=Number(btn.dataset.playDict);
+   playText(dictationItems[idx].sentence);
+  };
+ });
+ $('dictationArea').querySelectorAll('[data-slow-dict]').forEach(btn=>{
+  btn.onclick=()=>{
+   const idx=Number(btn.dataset.slowDict);
+   playTextWithRate(dictationItems[idx].sentence, 0.65);
+  };
+ });
+ $('dictationArea').querySelectorAll('[data-check-dict]').forEach(btn=>{
+  btn.onclick=()=>judgeDictationCard(Number(btn.dataset.checkDict));
+ });
+ $('dictationArea').querySelectorAll('[data-show-dict]').forEach(btn=>{
+  btn.onclick=()=>{
+   const idx=Number(btn.dataset.showDict);
+   $('dictFeedback-'+idx).innerHTML=`<span class="text-blue-700">정답: ${dictationItems[idx].answers.map(escapeHtml).join(' · ')}</span>`;
+  };
+ });
+}
+function judgeDictationCard(idx){
+ const card=$('dictationArea').querySelector(`[data-dictation-card="${idx}"]`);
+ if(!card)return;
+ const d=dictationItems[idx];
+ const inputs=[...card.querySelectorAll('[data-blank]')];
+ let score=0;
+ inputs.forEach((el,i)=>{
+  const ok=el.value.trim().toLowerCase()===d.answers[i].toLowerCase();
+  if(ok)score++;
+  el.classList.toggle('border-green-600',ok);
+  el.classList.toggle('bg-green-50',ok);
+  el.classList.toggle('border-rose-600',!ok);
+  el.classList.toggle('bg-rose-50',!ok);
+ });
+ $('dictFeedback-'+idx).innerHTML=score===inputs.length
+  ?`<span class="text-green-700"><i class="fa-solid fa-circle-check mr-1"></i>완벽 정답 (${score}/${inputs.length})</span>`
+  :`<span class="text-rose-700">${score} / ${inputs.length}개 정답</span>`;
+}
+$('checkAllDictation').onclick=()=>{
+ dictationItems.forEach((_,idx)=>judgeDictationCard(idx));
+};
+$('newDictation').onclick=()=>{if(questionBank.length){extractUniqueSentences();renderSentences();renderDictation()}};
+$('refreshSentences').onclick=()=>{if(questionBank.length){extractUniqueSentences();renderSentences();renderDictation()}};
+function getVoice(){
+ const voices=speechSynthesis.getVoices().filter(v=>/^en(-|_)/i.test(v.lang));
+ const gender=$('voiceGender').value;
+ const hints=gender==='female'?/female|woman|zira|samantha|ava|susan|karen| victoria|jenny|aria/i:/male|man|david|mark|guy|daniel|alex|james/i;
+ return voices.find(v=>hints.test(v.name))||voices.find(v=>/en-US/i.test(v.lang))||voices[0]||null;
+}
+function showAudioDock(status='음성 재생'){
+ $('audioDock').classList.remove('hidden');
+ $('audioStatus').textContent=status;
+}
+function hideAudioDock(){
+ $('audioDock').classList.add('hidden');
+}
+function stopAllAudio(){
+ audioRun++;audioQueue=[];audioIndex=0;isSpeaking=false;speechSynthesis.cancel();hideAudioDock();
+}
+function playText(text){
+ playTextWithRate(text, Number($('speechRate').value)||1);
+}
+function playTextWithRate(text, customRate){
+ if(!('speechSynthesis'in window)){alert('이 브라우저는 음성 재생을 지원하지 않습니다.');return}
+ stopAllAudio();audioRun++;
+ audioQueue=String(text||'').split(/(?<=[.!?])\s+/).filter(Boolean);audioIndex=0;
+ if(audioQueue.length)showAudioDock('음성 재생 중');
+ runQueue(audioRun, customRate);
+}
+function runQueue(run, overrideRate){
+ if(run!==audioRun||!audioQueue.length)return;
+ if(audioIndex>=audioQueue.length){if($('repeatAudio').checked){audioIndex=0}else{isSpeaking=false;$('audioStatus').textContent='재생 완료';setTimeout(()=>{if(run===audioRun&&!isSpeaking)hideAudioDock()},1800);return}}
+ const utter=new SpeechSynthesisUtterance(audioQueue[audioIndex++]);
+ const voice=getVoice();if(voice)utter.voice=voice;
+ utter.lang=voice?.lang||'en-US';utter.rate=overrideRate||(Number($('speechRate').value)||1);
+ utter.onstart=()=>{isSpeaking=true;showAudioDock('음성 재생 중')};
+ utter.onend=()=>{if(run===audioRun)runQueue(run, overrideRate)};
+ utter.onerror=()=>{if(run===audioRun)runQueue(run, overrideRate)};
+ speechSynthesis.speak(utter);
+}
+$('playAll').onclick=()=>playText(sentences.join(' '));
+function pauseAudioPlayback(){
+ if('speechSynthesis'in window){speechSynthesis.pause();$('audioStatus').textContent='일시정지됨';}
+}
+function resumeAudioPlayback(){
+ if('speechSynthesis'in window){speechSynthesis.resume();$('audioStatus').textContent='음성 재생 중';}
+}
+$('pauseAudio').onclick=pauseAudioPlayback;
+$('resumeAudio').onclick=resumeAudioPlayback;
+$('stopAudio').onclick=stopAllAudio;
+$('globalPause').onclick=pauseAudioPlayback;
+$('globalResume').onclick=resumeAudioPlayback;
+$('globalStop').onclick=stopAllAudio;
+if('speechSynthesis'in window)speechSynthesis.onvoiceschanged=()=>{};
+function extractDynamicVocab(){
+ if(!questionBank.length){
+  dynamicVocabList=[];
+  return;
+ }
+ const wordMap=new Map();
+ const stopWords=new Set(['this','that','with','from','have','will','would','could','should','their','there','these','those','about','which','when','where','what','who','whom','whose','been','being','were','are','was','has','had','does','did','doing','done','for','and','but','nor','yet','so','the','into','onto','upon','over','under','again','further','then','once','here','why','how','all','any','both','each','few','more','most','other','some','such','only','own','same','than','too','very','can','just','now','also','please','thank','thanks','hello','hi','yes','no','mr','ms','mrs','dr']);
+
+ questionBank.forEach(q=>{
+  const texts=[q.passage, q.question, ...(q.choices||[]).map(c=>c.text)].filter(Boolean);
+  texts.forEach(txt=>{
+   const cleanTxt=txt.replace(/(?:^|\s)(?:WOMAN|FEMALE|W|F|MAN|MALE|M)\s*:\s*/gi,' ').replace(/\s+/g,' ').trim();
+   const sentencesInTxt=cleanTxt.split(/(?<=[.!?])\s+/);
+   sentencesInTxt.forEach(sent=>{
+    const words=sent.match(/[A-Za-z]{4,}/g)||[];
+    words.forEach(rawW=>{
+     const lower=rawW.toLowerCase();
+     if(stopWords.has(lower))return;
+     // Prioritize words in toeicCoreDict or words >= 6 letters
+     const isCore=Boolean(toeicCoreDict[lower]);
+     if(!isCore && lower.length<6)return;
+     if(!wordMap.has(lower)){
+      wordMap.set(lower,{
+       word:lower,
+       meaning:toeicCoreDict[lower]||'',
+       example:sent.length<=130?sent:sent.slice(0,127)+'...',
+       isCore,
+       count:1
+      });
+     }else{
+      wordMap.get(lower).count++;
+     }
+    });
+   });
+  });
+ });
+
+ const allCandidates=[...wordMap.values()];
+ const coreCandidates=allCandidates.filter(x=>x.isCore);
+ const otherCandidates=allCandidates.filter(x=>!x.isCore);
+
+ // Pick up to 24 fresh TOEIC vocabulary words (prioritizing core TOEIC terms, shuffled every time)
+ const selectedCore=shuffle(coreCandidates).slice(0,24);
+ const remainingSlots=24-selectedCore.length;
+ const selectedOthers=remainingSlots>0?shuffle(otherCandidates).slice(0,remainingSlots):[];
+ dynamicVocabList=shuffle([...selectedCore,...selectedOthers]);
+}
+
+async function fetchWordMeaningIfNeeded(idx){
+ const item=dynamicVocabList[idx];
+ if(!item || item.meaning)return;
+ const el=$('vocabMeaning-'+idx);
+ if(el)el.textContent='뜻 번역 중...';
+ try{
+  const url='https://api.mymemory.translated.net/get?q='+encodeURIComponent(item.word)+'&langpair=en|ko';
+  const r=await fetch(url);
+  const j=await r.json();
+  item.meaning=j.responseData?.translatedText||'뜻 정보 없음';
+  if(el)el.textContent=item.meaning;
+ }catch(e){
+  item.meaning='뜻 불러오기 실패';
+  if(el)el.textContent=item.meaning;
+ }
+}
+
+function renderVocab(){
+ if(!questionBank.length){
+  $('vocabCount').textContent='파일 업로드 대기 중';
+  $('vocabGrid').innerHTML='<div class="col-span-full card p-8 text-center text-slate-500">먼저 엑셀 파일을 업로드하면 문제은행에서 토익 빈출 단어를 자동으로 추출합니다.</div>';
+  return;
+ }
+ if(!dynamicVocabList.length)extractDynamicVocab();
+ $('vocabCount').textContent=`추출된 빈출 단어 ${dynamicVocabList.length}개`;
+ $('vocabGrid').innerHTML=dynamicVocabList.map((v,i)=>`<div class="flip-card" tabindex="0" role="button" aria-label="${escapeHtml(v.word)} 단어 카드" data-flip="${i}"><div class="flip-inner"><div class="flip-front"><span class="text-xs text-blue-500 mb-2">${v.isCore?'TOEIC 핵심 빈출':'지문 주요 어휘'} ${String(i+1).padStart(2,'0')}</span><strong class="text-lg text-center">${escapeHtml(v.word)}</strong><span class="text-xs text-blue-400 mt-2">클릭하여 뜻·출제문장 확인</span></div><div class="flip-back"><strong class="text-lg text-center" id="vocabMeaning-${i}">${escapeHtml(v.meaning||'클릭 시 뜻 자동 번역')}</strong><span class="text-xs text-blue-100 mt-3 text-center leading-relaxed line-clamp-3">"${escapeHtml(v.example)}"</span></div></div></div>`).join('');
+ $('vocabGrid').querySelectorAll('[data-flip]').forEach(c=>{
+  const flip=()=>{
+   c.classList.toggle('flipped');
+   if(c.classList.contains('flipped'))fetchWordMeaningIfNeeded(Number(c.dataset.flip));
+  };
+  c.addEventListener('click',flip);
+  c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();flip()}});
+ });
+}
+$('refreshVocab').onclick=()=>{
+ if(!questionBank.length){alert('먼저 엑셀 파일을 업로드해주세요.');return;}
+ extractDynamicVocab();
+ renderVocab();
+};
+renderVocab();
+
+document.addEventListener('mouseup',async()=>{
+ const sel=window.getSelection();const text=sel?.toString().trim();
+ if(!text||text.length>100||!/[A-Za-z]/.test(text)){$('selectionTip').style.display='none';return}
+ const range=sel.getRangeAt(0),rect=range.getBoundingClientRect();
+ const tip=$('selectionTip');$('tipWord').textContent=text;$('tipMeaning').textContent='번역 중…';
+ tip.style.left=Math.min(window.innerWidth-280,Math.max(8,rect.left))+'px';tip.style.top=Math.max(8,rect.bottom+8)+'px';tip.style.display='block';
+ try{const url='https://api.mymemory.translated.net/get?q='+encodeURIComponent(text)+'&langpair=en|ko';const r=await fetch(url);const j=await r.json();$('tipMeaning').textContent=j.responseData?.translatedText||'번역 결과가 없습니다.'}
+ catch(e){$('tipMeaning').textContent='번역 서비스를 이용할 수 없습니다.'}
+});
+document.addEventListener('mousedown',e=>{if(!$('selectionTip').contains(e.target))$('selectionTip').style.display='none'});
+</script>
+</body>
+</html>
